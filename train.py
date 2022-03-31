@@ -27,7 +27,7 @@ class Trainer:
                 rain, clean = sample
                 rain = rain.to(device)
                 clean = clean.to(device)
-                outputs = model(rain)
+                outputs, _ = model(rain)
                 pixel_metric = self.criterion(outputs, clean)
                 loss = -pixel_metric
 

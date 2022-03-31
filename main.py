@@ -13,7 +13,7 @@ if __name__ == '__main__':
     name = 'prenet'
     root_dir = "/home/sb4539/dedrop"
     
-    epochs, batch_size = 100, 16
+    epochs, batch_size = 100, 8
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model = PReNet().to(device)
