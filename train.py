@@ -24,10 +24,11 @@ class Trainer:
             
             log_loss = []
             for batch_idx, sample in enumerate(self.data_loader):
-                images = sample["image"].to(device)
-                labels = sample['percentage'].to(device)
-                outputs = model(images).squeeze().float()
-                pixel_metric = self.criterion(outputs, labels)
+                rain, clean = sample
+                rain = rain.to(device)
+                clean = clean.to(device)
+                outputs = model(rain)
+                pixel_metric = self.criterion(outputs, clean)
                 loss = -pixel_metric
 
                 with torch.set_grad_enabled(True):
@@ -36,7 +37,7 @@ class Trainer:
                     self.optimizer.step()
                     self.scheduler.step()
 
-                log_loss.append(loss.item())
+                log_loss.append(pixel_metric.item())
                 if batch_idx % 25 == 0:
                     print("Epoch {} : {} ({:04d}/{:04d}) Loss = {:.4f}".format(epoch, 'Train', batch_idx, int(batch_step_size), loss.item()))
                 train_loss.append(np.mean(log_loss))
