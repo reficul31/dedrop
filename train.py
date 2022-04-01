@@ -25,8 +25,8 @@ class Trainer:
             log_loss = []
             for batch_idx, sample in enumerate(self.data_loader):
                 rain, clean = sample
-                rain = rain.to(device)
-                clean = clean.to(device)
+                rain = rain.to(device).float()
+                clean = clean.to(device).float()
                 outputs, _ = model(rain)
                 pixel_metric = self.criterion(outputs, clean)
                 loss = -pixel_metric
