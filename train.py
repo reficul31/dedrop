@@ -11,7 +11,7 @@ class Trainer:
         self.root_dir = root_dir
         self.batch_size = batch_size
 
-    def train_model(self, name, model, epochs=100, checkpoint_epoch = 0):
+    def train_model(self, name, model, epochs=100, checkpoint_epoch = 0, save_checkpoint_frequency=20):
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         
         if checkpoint_epoch != 0:
@@ -45,7 +45,7 @@ class Trainer:
             if not os.path.isdir(os.path.join(self.root_dir, name)):
                 os.makedirs(os.path.join(self.root_dir, name))
 
-            if epoch % 10 == 0:
+            if epoch % save_checkpoint_frequency == 0:
                 torch.save({
                     'epoch': epoch,
                     'model_state_dict': model.state_dict(),
