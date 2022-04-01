@@ -1,4 +1,5 @@
 import os
+import time
 import torch
 import numpy as np
 
@@ -11,7 +12,7 @@ class Trainer:
         self.root_dir = root_dir
         self.batch_size = batch_size
 
-    def train_model(self, name, model, epochs=100, checkpoint_epoch = 0, save_checkpoint_frequency=20):
+    def train_model(self, name, model, epochs=100, checkpoint_epoch = 0, save_checkpoint_frequency=20, print_frequency=15):
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         
         if checkpoint_epoch != 0:
@@ -23,6 +24,7 @@ class Trainer:
             batch_step_size = len(self.data_loader.dataset) / self.batch_size
             
             log_loss = []
+            start = time.time()
             for batch_idx, sample in enumerate(self.data_loader):
                 rain, clean = sample
                 rain = rain.to(device).float()
@@ -38,10 +40,12 @@ class Trainer:
                     self.scheduler.step()
 
                 log_loss.append(pixel_metric.item())
-                if batch_idx % 25 == 0:
-                    print("Epoch {} : {} ({:04d}/{:04d}) Loss = {:.4f}".format(epoch, 'Train', batch_idx, int(batch_step_size), loss.item()))
-                train_loss.append(np.mean(log_loss))
-
+                if batch_idx % print_frequency == 0:
+                    print("Epoch {} : {} ({:04d}/{:04d}) Loss = {:.4f}".format(epoch + 1, 'Train', batch_idx, int(batch_step_size), loss.item()))
+            
+            train_loss.append(np.mean(log_loss))
+            print("Epoch {} done: Time = {}, Mean Loss = {}".format(epoch + 1, time.time() - start, train_loss[-1]))
+            
             if not os.path.isdir(os.path.join(self.root_dir, name)):
                 os.makedirs(os.path.join(self.root_dir, name))
 
