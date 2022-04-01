@@ -52,6 +52,7 @@ class Trainer:
                     'optimizer_state_dict': self.optimizer.state_dict(),
                     'scheduler_state_dict': self.scheduler.state_dict()
                 }, os.path.join(self.root_dir, name, "checkpoint_{}.tar".format(epoch)))
+                np.save(os.path.join(self.root_dir, name, "train-loss-epoch-{}.npy".format(epoch)), train_loss)
             else:
                 torch.save({
                     'epoch': epoch,
@@ -59,5 +60,4 @@ class Trainer:
                     'optimizer_state_dict': self.optimizer.state_dict(),
                     'scheduler_state_dict': self.scheduler.state_dict()
                 }, os.path.join(self.root_dir, name, "checkpoint_latest.tar"))
-                np.save(os.path.join(self.root_dir, name, "train-loss-epoch-{}.npy".format(epoch)), train_loss)
         return model, train_loss
