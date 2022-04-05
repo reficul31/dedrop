@@ -42,6 +42,9 @@ class TestDataset(Dataset):
 
         clean = np.float32(clean) / 255
         rain = np.float32(rain) / 255
+
+        clean = clean.transpose(2, 0, 1)
+        rain = rain.transpose(2, 0, 1)
         
         if self.transform is None:
             return rain, clean
