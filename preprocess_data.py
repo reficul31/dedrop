@@ -55,6 +55,9 @@ def preprocess_train_data(data_path, patch_size, stride):
 
         clean = np.float32(clean) / 255
         rain = np.float32(rain) / 255
+
+        clean = clean.transpose(2,0,1)
+        rain = rain.transpose(2, 0, 1)
         
         clean_patches = get_patches(clean.transpose(2,0,1), win=patch_size, stride=stride)
         rain_patches = get_patches(rain.transpose(2, 0, 1), win=patch_size, stride=stride)
@@ -69,7 +72,7 @@ def preprocess_train_data(data_path, patch_size, stride):
             train_num += 1
 
     rain_h5f.close()
-    rain_data.close()
+    clean_h5f.close()
 
 if __name__ == '__main__':
     file_path = os.path.dirname(os.path.realpath(__file__))
