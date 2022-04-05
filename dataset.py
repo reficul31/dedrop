@@ -1,22 +1,21 @@
 import os
+import cv2
+import h5py
 import numpy as np
+import random as rd
 
-from PIL import Image
 from torch.utils.data import Dataset
 from torchvision.transforms import Compose, ToTensor
 
-class DedropDataset(Dataset):
-    def __init__(self, root_dir, phase, transform=None, normalize = True, size=(480, 760), window=128):
+class TestDataset(Dataset):
+    def __init__(self, phase, transform=None):
         super().__init__()
         
-        self.size = size
-        self.phase = phase
+        file_path = os.path.dirname(os.path.realpath(__file__))
         self.transform = transform
-        self.window = window
-        self.normalize = normalize
 
-        self.rain_folder_path = os.path.join(root_dir, phase, "data")
-        self.clean_folder_path = os.path.join(root_dir, phase, "gt")
+        self.rain_folder_path = os.path.join(file_path, phase, "data")
+        self.clean_folder_path = os.path.join(file_path, phase, "gt")
 
         self.rain_image_list = os.listdir(self.rain_folder_path)
         self.clean_image_list = os.listdir(self.clean_folder_path)
@@ -29,35 +28,76 @@ class DedropDataset(Dataset):
     def __len__(self):
         return len(self.rain_image_list)
     
-    def get_random_patches(self, rain, clean):
-        endh, endw = self.size
-        width, height = np.random.randint(0, endw - self.window-1), np.random.randint(0, endh - self.window-1)
-
-        rain_patch = rain[width: width+self.window, height: height+self.window, :]
-        clean_patch = clean[width: width+self.window, height: height+self.window, :]
-        return rain_patch, clean_patch
-    
     def __getitem__(self, idx):
-        clean_image_path = os.path.join(self.clean_folder_path, self.clean_image_list[idx])
-        rain_image_path = os.path.join(self.rain_folder_path, self.rain_image_list[idx])
+        clean_path = os.path.join(self.clean_folder_path, self.clean_image_list[idx])
+        rain_path = os.path.join(self.rain_folder_path, self.rain_image_list[idx])
         
-        rain = Image.open(rain_image_path).resize(self.size).convert("RGB")
-        clean = Image.open(clean_image_path).resize(self.size).convert("RGB")
+        clean = cv2.imread(clean_path)
+        b, g, r = cv2.split(clean)
+        clean = cv2.merge([r, g, b])
 
-        rain, clean = self.get_random_patches(np.array(rain), np.array(clean))
-        
-        if self.normalize:
-            rain, clean = rain / 255, clean / 255
+        rain = cv2.imread(rain_path)
+        b, g, r = cv2.split(rain)
+        rain = cv2.merge([r, g, b])
+
+        clean = np.float32(clean) / 255
+        rain = np.float32(rain) / 255
         
         if self.transform is None:
             return rain, clean
 
         return self.transform(rain), self.transform(clean)
-        
 
-def get_dataset(root_dir, phase):
-    return DedropDataset(
-        root_dir, 
-        phase=phase, 
-        transform=Compose([ToTensor()])
-    )
+class TrainDataset(Dataset):
+    def __init__(self, phase, transform=None):
+        super(TrainDataset, self).__init__()
+
+        file_path = os.path.dirname(os.path.realpath(__file__))
+        self.data_dir = os.path.join(file_path, phase)
+        self.transform = transform
+
+        rain_path = os.path.join(self.data_dir, 'train_rain.h5')
+        clean_path = os.path.join(self.data_dir, 'train_clean.h5')
+
+        rain_data = h5py.File(rain_path, 'r')
+        clean_data = h5py.File(clean_path, 'r')
+
+        self.keys = list(rain_data.keys())
+        rd.shuffle(self.keys)
+        
+        rain_data.close()
+        clean_data.close()
+
+    def __len__(self):
+        return len(self.keys)
+
+    def __getitem__(self, index):
+        rain_path = os.path.join(self.data_dir, 'train_rain.h5')
+        clean_path = os.path.join(self.data_dir, 'train_clean.h5')
+
+        rain_data = h5py.File(rain_path, 'r')
+        clean_data = h5py.File(clean_path, 'r')
+
+        key = self.keys[index]
+        rain = np.array(rain_data[key])
+        clean = np.array(clean_data[key])
+
+        rain_data.close()
+        clean_data.close()
+
+        if self.transform is None:
+            return rain, clean
+
+        return self.transform(rain), self.transform(clean)
+
+def get_dataset(phase):
+    if phase == 'train':
+        return TrainDataset(
+            phase=phase, 
+            transform=Compose([ToTensor()])
+        )
+    else:
+        return TestDataset(
+            phase=phase,
+            transform=Compose([ToTensor()])
+        )

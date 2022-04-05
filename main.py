@@ -13,7 +13,7 @@ if __name__ == '__main__':
     name = 'prenet'
     root_dir = "/home/sb4539/dedrop"
     
-    epochs, batch_size = 300, 32
+    epochs, batch_size = 100, 18
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model = PReNet().to(device)
@@ -23,7 +23,7 @@ if __name__ == '__main__':
 
     criterion = SSIM()
     optimizer = Adam(model.parameters(), lr=1e-3)
-    scheduler = MultiStepLR(optimizer, milestones=[100, 200, 250])
+    scheduler = MultiStepLR(optimizer, milestones=[30, 50, 80])
 
     trainer = Trainer(criterion, optimizer, scheduler, dataloader, root_dir, batch_size)
     model, _ = trainer.train_model(name, model, epochs=epochs)
