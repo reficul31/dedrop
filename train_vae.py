@@ -18,7 +18,7 @@ if __name__ == '__main__':
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model = VAE().to(device)
     
-    train_dataset = get_dataset(root_dir, phase='train')
+    train_dataset = get_dataset(phase='train')
     dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
 
     criterion = SSIM()
