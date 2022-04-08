@@ -10,7 +10,7 @@ from dataset import get_dataset
 from train import Trainer
 
 if __name__ == '__main__':
-    name = 'prenet'
+    name = 'vae'
     root_dir = "/home/sb4539/dedrop"
     
     epochs, batch_size = 100, 18
@@ -19,11 +19,12 @@ if __name__ == '__main__':
     model = VAE().to(device)
     
     train_dataset = get_dataset(phase='train')
-    dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+    dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=2)
 
     criterion = SSIM()
     optimizer = Adam(model.parameters(), lr=1e-3)
     scheduler = MultiStepLR(optimizer, milestones=[30, 50, 80])
 
     trainer = Trainer(criterion, optimizer, scheduler, dataloader, root_dir, batch_size)
-    model, _ = trainer.train_vae(name, model, epochs=epochs)
+    model, checkpoint_epoch = trainer.load_latest_checkpoint(name, model)
+    model, _ = trainer.train_vae(name, model, epochs=epochs, checkpoint_epoch=checkpoint_epoch, print_frequency=500)

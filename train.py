@@ -12,6 +12,19 @@ class Trainer:
         self.root_dir = root_dir
         self.batch_size = batch_size
     
+    def load_latest_checkpoint(self, name, model):
+        checkpoint_path = os.path.join(self.root_dir, name, "checkpoint_latest.tar")
+        if not os.path.isfile(checkpoint_path):
+            print("Checkpoint does not exist")
+            return model, 0
+
+        checkpoint = torch.load(checkpoint_path)
+        self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+        self.scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
+        model.load_state_dict(checkpoint['model_state_dict'])
+        checkpoint_epoch = int(checkpoint['epoch'])
+        return model, checkpoint_epoch
+    
     def train_vae(self, name, model, epochs=100, checkpoint_epoch=0, save_checkpoint_frequency=20, print_frequency=15):
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         
@@ -30,7 +43,8 @@ class Trainer:
                 rain = rain.to(device).float()
                 clean = clean.to(device).float()
                 outputs, _, _ = model(rain)
-                loss = self.criterion(outputs, clean)
+                pixel_metric = self.criterion(outputs, clean)
+                loss = -pixel_metric
 
                 with torch.set_grad_enabled(True):
                     self.optimizer.zero_grad()
