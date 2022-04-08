@@ -1,18 +1,17 @@
 import os
 import cv2
 import h5py
+import torch
 import numpy as np
 import random as rd
 
 from torch.utils.data import Dataset
-from torchvision.transforms import Compose, ToTensor
 
 class TestDataset(Dataset):
-    def __init__(self, phase, transform=None):
+    def __init__(self, phase):
         super().__init__()
         
         file_path = os.path.dirname(os.path.realpath(__file__))
-        self.transform = transform
 
         self.rain_folder_path = os.path.join(file_path, phase, "data")
         self.clean_folder_path = os.path.join(file_path, phase, "gt")
@@ -46,18 +45,14 @@ class TestDataset(Dataset):
         clean = clean.transpose(2, 0, 1)
         rain = rain.transpose(2, 0, 1)
         
-        if self.transform is None:
-            return rain, clean
-
-        return self.transform(rain), self.transform(clean)
+        return torch.Tensor(rain), torch.Tensor(clean)
 
 class TrainDataset(Dataset):
-    def __init__(self, phase, transform=None):
+    def __init__(self, phase):
         super(TrainDataset, self).__init__()
 
         file_path = os.path.dirname(os.path.realpath(__file__))
         self.data_dir = os.path.join(file_path, phase)
-        self.transform = transform
 
         rain_path = os.path.join(self.data_dir, 'train_rain.h5')
         clean_path = os.path.join(self.data_dir, 'train_clean.h5')
@@ -88,19 +83,10 @@ class TrainDataset(Dataset):
         rain_data.close()
         clean_data.close()
 
-        if self.transform is None:
-            return rain, clean
-
-        return self.transform(rain), self.transform(clean)
+        return torch.Tensor(rain), torch.Tensor(clean)
 
 def get_dataset(phase):
     if phase == 'train':
-        return TrainDataset(
-            phase=phase, 
-            transform=Compose([ToTensor()])
-        )
+        return TrainDataset(phase=phase)
     else:
-        return TestDataset(
-            phase=phase,
-            transform=Compose([ToTensor()])
-        )
+        return TestDataset(phase=phase)
