@@ -26,4 +26,4 @@ if __name__ == '__main__':
     scheduler = MultiStepLR(optimizer, milestones=[30, 50, 80])
 
     trainer = Trainer(criterion, optimizer, scheduler, dataloader, root_dir, batch_size)
-    model, _ = trainer.train_model(name, model, epochs=epochs)
+    model, _ = trainer.train_vae(name, model, epochs=epochs)
