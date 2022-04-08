@@ -1,9 +1,9 @@
 from torch.autograd import Variable
 from torch.nn import Module, Conv2d, BatchNorm2d, Linear, BatchNorm1d, ReLU, ConvTranspose2d
 
-class VAE_CNN(Module):
+class VAE(Module):
     def __init__(self):
-        super(VAE_CNN, self).__init__()
+        super(VAE, self).__init__()
         # Encoder
         self.conv1 = Conv2d(3, 16, kernel_size=3, stride=1, padding=1, bias=False)
         self.bn1 = BatchNorm2d(16)
