@@ -10,6 +10,6 @@ class DedropNet(Module):
         self.inpaint = InpaintNet()
     
     def forward(self, image):
-        mask = self.vae(image)
+        mask, _, _, _ = self.vae(image)
         fame1, frame2, image = self.inpaint(image, mask)
         return image, fame1, frame2

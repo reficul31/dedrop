@@ -43,7 +43,7 @@ class Decoder(Module):
             Linear(nz, nef*16),
             View((-1, nef*16, 1, 1)),
             ReLU(True),
-            ConvTranspose2d(nef*16, nef * 8, 4, 1, 0, bias=False),
+            ConvTranspose2d(nef * 16, nef * 8, 4, 1, 0, bias=False),
             ReLU(True),
             ConvTranspose2d(nef * 8, nef * 4, 4, 2, 1, bias=False),
             ReLU(True),
@@ -66,7 +66,7 @@ class VAE(Module):
         self.nz = 128
         self.nef= 32
         self.encoder = Encoder(self.nc, self.nef, self.nz)
-        self.decoder = Decoder(self.nz, self.nef, 1)
+        self.decoder = Decoder(self.nz, self.nef, self.nc)
 
     def sample (self, input):
         return  self.decoder(input)

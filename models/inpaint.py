@@ -11,7 +11,7 @@ def get_conv2d_relu_layer(*args, **kwargs):
 class InpaintNet(Module):
     def __init__(self):
         super(InpaintNet, self).__init__()
-        self.conv1 = get_conv2d_relu_layer(4, 64, 5, 1, 2)
+        self.conv1 = get_conv2d_relu_layer(6, 64, 5, 1, 2)
         self.conv2 = get_conv2d_relu_layer(64, 128, 3, 2, 1)
         self.conv3 = get_conv2d_relu_layer(128, 128, 3, 1, 1)
         self.conv4 = get_conv2d_relu_layer(128, 256, 3, 2, 1)
