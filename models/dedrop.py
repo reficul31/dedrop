@@ -1,8 +1,7 @@
+from torch.nn import Module
 
 from .vae import VAE
 from .inpaint import InpaintNet
-from torch.nn import Module
-from torch.nn.functional import softmax
 
 class DedropNet(Module):
     def __init__(self):
@@ -12,9 +11,5 @@ class DedropNet(Module):
     
     def forward(self, image):
         mask = self.vae(image)
-        mask = softmax(mask)
-        
-        mod = image - mask
-
-        image, mask = self.inpaint(mod, mask)
-        return image, mask
+        fame1, frame2, image = self.inpaint(image, mask)
+        return image, fame1, frame2

@@ -1,10 +1,18 @@
 from torch.autograd import Variable
-from torch.nn import Module, Conv2d, Linear, ReLU, ConvTranspose2d, Sequential, View
+from torch.nn import Module, Conv2d, Linear, ReLU, ConvTranspose2d, Sequential
 
 def reparametrize(mu, logvar):
     std = logvar.div(2).exp()
     eps = Variable(std.data.new(std.size()).normal_())
     return mu + std*eps
+
+class View(Module):
+    def __init__(self, size):
+        super(View, self).__init__()
+        self.size = size
+
+    def forward(self, tensor):
+        return tensor.view(self.size)
 
 class Encoder(Module):
     def __init__(self, nc, nef, nz):
@@ -57,8 +65,8 @@ class VAE(Module):
         self.nc = 3
         self.nz = 128
         self.nef= 32
-        self.encoder = Encoder(self.nc,self.nef,self.nz)
-        self.decoder = Decoder(self.nz,self.nef,self.nc)
+        self.encoder = Encoder(self.nc, self.nef, self.nz)
+        self.decoder = Decoder(self.nz, self.nef, 1)
 
     def sample (self, input):
         return  self.decoder(input)

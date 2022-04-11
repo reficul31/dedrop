@@ -1,146 +1,69 @@
-import math
-
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
 
-def weights_init(init_type='gaussian'):
-    def init_fun(m):
-        classname = m.__class__.__name__
-        if (classname.find('Conv') == 0 or classname.find(
-                'Linear') == 0) and hasattr(m, 'weight'):
-            if init_type == 'gaussian':
-                nn.init.normal_(m.weight, 0.0, 0.02)
-            elif init_type == 'xavier':
-                nn.init.xavier_normal_(m.weight, gain=math.sqrt(2))
-            elif init_type == 'kaiming':
-                nn.init.kaiming_normal_(m.weight, a=0, mode='fan_in')
-            elif init_type == 'orthogonal':
-                nn.init.orthogonal_(m.weight, gain=math.sqrt(2))
-            elif init_type == 'default':
-                pass
-            else:
-                assert 0, "Unsupported initialization: {}".format(init_type)
-            if hasattr(m, 'bias') and m.bias is not None:
-                nn.init.constant_(m.bias, 0.0)
+from torch.nn import Module, Conv2d, ReLU, Sequential, ConvTranspose2d, ReflectionPad2d, AvgPool2d
 
-    return init_fun
+def get_conv2d_relu_layer(*args, **kwargs):
+    return Sequential(
+        Conv2d(*args, **kwargs),
+        ReLU()
+    )
 
-class PartialConv(nn.Module):
-    def __init__(self, in_channels, out_channels, kernel_size, stride=1,
-                 padding=0, dilation=1, groups=1, bias=True):
-        super().__init__()
-        self.input_conv = nn.Conv2d(in_channels, out_channels, kernel_size,
-                                    stride, padding, dilation, groups, bias)
-        self.mask_conv = nn.Conv2d(in_channels, out_channels, kernel_size,
-                                   stride, padding, dilation, groups, False)
-        self.input_conv.apply(weights_init('kaiming'))
-
-        torch.nn.init.constant_(self.mask_conv.weight, 1.0)
-
-        for param in self.mask_conv.parameters():
-            param.requires_grad = False
+class InpaintNet(Module):
+    def __init__(self):
+        super(InpaintNet, self).__init__()
+        self.conv1 = get_conv2d_relu_layer(4, 64, 5, 1, 2)
+        self.conv2 = get_conv2d_relu_layer(64, 128, 3, 2, 1)
+        self.conv3 = get_conv2d_relu_layer(128, 128, 3, 1, 1)
+        self.conv4 = get_conv2d_relu_layer(128, 256, 3, 2, 1)
+        self.conv5 = get_conv2d_relu_layer(256, 256, 3, 1, 1)
+        self.conv6 = get_conv2d_relu_layer(256, 256, 3, 1, 1)
+        self.diconv1 = get_conv2d_relu_layer(256, 256, 3, 1, 2, dilation = 2)
+        self.diconv2 = get_conv2d_relu_layer(256, 256, 3, 1, 4, dilation = 4)
+        self.diconv3 = get_conv2d_relu_layer(256, 256, 3, 1, 8, dilation = 8)
+        self.diconv4 = get_conv2d_relu_layer(256, 256, 3, 1, 16, dilation = 16)
+        self.conv7 = get_conv2d_relu_layer(256, 256, 3, 1, 1)
+        self.conv8 = get_conv2d_relu_layer(256, 256, 3, 1, 1)
+        self.conv9 = get_conv2d_relu_layer(128, 128, 3, 1, 1)
+        self.conv10 = get_conv2d_relu_layer(64, 32, 3, 1, 1)
+        self.outframe1 = get_conv2d_relu_layer(256, 3, 3, 1, 1)
+        self.outframe2 = get_conv2d_relu_layer(128, 3, 3, 1, 1)
+        self.deconv1 = Sequential(
+            ConvTranspose2d(256, 128, 4, 2, 1),
+            ReflectionPad2d((1, 0, 1, 0)),
+            AvgPool2d(2, stride = 1),
+            ReLU()
+        )
+        self.deconv2 = Sequential(
+            ConvTranspose2d(128, 64, 4, 2, 1),
+            ReflectionPad2d((1, 0, 1, 0)),
+            AvgPool2d(2, stride = 1),
+            ReLU()
+        )
+        self.output = Conv2d(32, 3, 3, 1, 1)
 
     def forward(self, input, mask):
-        output = self.input_conv(input * mask)
-        if self.input_conv.bias is not None:
-            output_bias = self.input_conv.bias.view(1, -1, 1, 1).expand_as(
-                output)
-        else:
-            output_bias = torch.zeros_like(output)
-
-        with torch.no_grad():
-            output_mask = self.mask_conv(mask)
-
-        no_update_holes = output_mask == 0
-        mask_sum = output_mask.masked_fill_(no_update_holes, 1.0)
-
-        output_pre = (output - output_bias) / mask_sum + output_bias
-        output = output_pre.masked_fill_(no_update_holes, 0.0)
-
-        new_mask = torch.ones_like(output)
-        new_mask = new_mask.masked_fill_(no_update_holes, 0.0)
-
-        return output, new_mask
-
-class PCBActiv(nn.Module):
-    def __init__(self, in_ch, out_ch, bn=True, sample='none-3', activ='relu',
-                 conv_bias=False):
-        super().__init__()
-        if sample == 'down-5':
-            self.conv = PartialConv(in_ch, out_ch, 5, 2, 2, bias=conv_bias)
-        elif sample == 'down-7':
-            self.conv = PartialConv(in_ch, out_ch, 7, 2, 3, bias=conv_bias)
-        elif sample == 'down-3':
-            self.conv = PartialConv(in_ch, out_ch, 3, 2, 1, bias=conv_bias)
-        else:
-            self.conv = PartialConv(in_ch, out_ch, 3, 1, 1, bias=conv_bias)
-
-        if bn:
-            self.bn = nn.BatchNorm2d(out_ch)
-        if activ == 'relu':
-            self.activation = nn.ReLU()
-        elif activ == 'leaky':
-            self.activation = nn.LeakyReLU(negative_slope=0.2)
-
-    def forward(self, input, input_mask):
-        h, h_mask = self.conv(input, input_mask)
-        if hasattr(self, 'bn'):
-            h = self.bn(h)
-        if hasattr(self, 'activation'):
-            h = self.activation(h)
-        return h, h_mask
-
-class InpaintNet(nn.Module):
-    def __init__(self, layer_size=7, input_channels=3, upsampling_mode='nearest'):
-        super().__init__()
-        self.freeze_enc_bn = False
-        self.upsampling_mode = upsampling_mode
-        self.layer_size = layer_size
-        self.enc_1 = PCBActiv(input_channels, 64, bn=False, sample='down-7')
-        self.enc_2 = PCBActiv(64, 128, sample='down-5')
-        self.enc_3 = PCBActiv(128, 256, sample='down-5')
-        self.enc_4 = PCBActiv(256, 512, sample='down-3')
-        for i in range(4, self.layer_size):
-            name = 'enc_{:d}'.format(i + 1)
-            setattr(self, name, PCBActiv(512, 512, sample='down-3'))
-
-        for i in range(4, self.layer_size):
-            name = 'dec_{:d}'.format(i + 1)
-            setattr(self, name, PCBActiv(512 + 512, 512, activ='leaky'))
-        self.dec_4 = PCBActiv(512 + 256, 256, activ='leaky')
-        self.dec_3 = PCBActiv(256 + 128, 128, activ='leaky')
-        self.dec_2 = PCBActiv(128 + 64, 64, activ='leaky')
-        self.dec_1 = PCBActiv(64 + input_channels, input_channels,
-                              bn=False, activ=None, conv_bias=True)
-
-    def forward(self, input, input_mask):
-        h_dict = {}
-        h_mask_dict = {}
-
-        h_dict['h_0'], h_mask_dict['h_0'] = input, input_mask
-
-        h_key_prev = 'h_0'
-        for i in range(1, self.layer_size + 1):
-            l_key = 'enc_{:d}'.format(i)
-            h_key = 'h_{:d}'.format(i)
-            h_dict[h_key], h_mask_dict[h_key] = getattr(self, l_key)(
-                h_dict[h_key_prev], h_mask_dict[h_key_prev])
-            h_key_prev = h_key
-
-        h_key = 'h_{:d}'.format(self.layer_size)
-        h, h_mask = h_dict[h_key], h_mask_dict[h_key]
-
-        for i in range(self.layer_size, 0, -1):
-            enc_h_key = 'h_{:d}'.format(i - 1)
-            dec_l_key = 'dec_{:d}'.format(i)
-
-            h = F.interpolate(h, scale_factor=2, mode=self.upsampling_mode)
-            h_mask = F.interpolate(
-                h_mask, scale_factor=2, mode='nearest')
-
-            h = torch.cat([h, h_dict[enc_h_key]], dim=1)
-            h_mask = torch.cat([h_mask, h_mask_dict[enc_h_key]], dim=1)
-            h, h_mask = getattr(self, dec_l_key)(h, h_mask)
-
-        return h, h_mask
+        x = torch.cat((input, mask), 1)
+        x = self.conv1(x)
+        res1 = x
+        x = self.conv2(x)
+        x = self.conv3(x)
+        res2 = x
+        x = self.conv4(x)
+        x = self.conv5(x)
+        x = self.conv6(x)
+        x = self.diconv1(x)
+        x = self.diconv2(x)
+        x = self.diconv3(x)
+        x = self.diconv4(x)
+        x = self.conv7(x)
+        x = self.conv8(x)
+        frame1 = self.outframe1(x)
+        x = self.deconv1(x)
+        x = x + res2
+        x = self.conv9(x)
+        frame2 = self.outframe2(x)
+        x = self.deconv2(x)
+        x = x + res1
+        x = self.conv10(x)
+        x = self.output(x)
+        return frame1, frame2, x
