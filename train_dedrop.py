@@ -13,7 +13,7 @@ if __name__ == '__main__':
     name = 'dedrop'
     root_dir = "/home/sb4539/dedrop"
     
-    epochs, batch_size = 100, 18
+    epochs, batch_size = 100, 32
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model = DedropNet().to(device)
