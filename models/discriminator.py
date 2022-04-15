@@ -19,7 +19,7 @@ class Discriminator(Module):
         self.conv7 = get_conv2d_relu_layer(128, 64, 5, 4, 1)
         self.conv8 = get_conv2d_relu_layer(64, 32, 5, 4, 1)
         self.fc = Sequential(
-            Linear(32 * 14 * 14, 1024),
+            Linear(32 * 4 * 4, 1024),
             Linear(1024, 1),
             Sigmoid()
         )
@@ -32,8 +32,8 @@ class Discriminator(Module):
         x = self.conv5(x)
         x = self.conv6(x)
         mask = self.conv_mask(x)
+        x = x * mask
         x = self.conv7(x * mask)
-        x = self.conv7(x)
         x = self.conv8(x)
         x = x.view(x.size(0), -1)
         return mask, self.fc(x)

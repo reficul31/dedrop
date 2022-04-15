@@ -75,8 +75,8 @@ for epoch in range(checkpoint_epoch, epochs):
         disc_out_real, _ = netDisc(clean)
         disc_loss_real = -torch.mean(disc_out_real)
 
-        mask, mu, logvar, _ = netDropGen(input)
-        _, _, clean_fake = netInpaint(input, mask)
+        mask, mu, logvar, _ = netDropGen(rain)
+        _, _, clean_fake = netInpaint(rain, mask)
 
         disc_out_fake, _ = netDisc(clean_fake)
         disc_loss_fake = torch.mean(disc_out_real)
