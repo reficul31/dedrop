@@ -2,7 +2,6 @@ import os
 import time
 import torch
 import numpy as np
-import torch.nn.functional as F
 
 from math import log
 from torch.optim import Adam
@@ -79,37 +78,31 @@ for epoch in range(checkpoint_epoch, epochs):
         mask, mu, logvar, _ = netDropGen(rain)
         _, _, clean_fake = netInpaint(rain, mask)
 
-        disc_out_fake, _ = netDisc(clean_fake)
-        disc_loss_fake = torch.mean(disc_out_real)
-
         logvar.clamp(min=log(1e-8), max=log(1e4))
         var = torch.exp(logvar)
         kl_gauss = torch.mean(mu ** 2 + (var - 1 - logvar)) / 2
 
-        disc_err = disc_loss_real + disc_loss_fake
-        disc_err.backward()
-        
-        optDisc.step()
-        schedulerDisc.step()
+        disc_out_fake, _ = netDisc(clean_fake)
+        disc_loss_fake = torch.mean(disc_out_real)
 
-        if (batch_idx + 1) % 5 == 0:
+        loss = disc_loss_real + disc_loss_fake - kl_gauss
+        with torch.set_grad_enabled(True):
+            netDisc.zero_grad()
             netDropGen.zero_grad()
             netInpaint.zero_grad()
-
-            gen_err = kl_gauss - disc_loss_fake
-            gen_err.backward()
-
+            loss.backward()
+        
+            optDisc.step()
             optDropGen.step()
             optInpaint.step()
 
+            schedulerDisc.step()
             schedulerDropGen.step()
             schedulerInpaint.step()
-        
-        recon_loss = F.mse_loss(clean_fake, clean)
-        log_loss.append(recon_loss.item())
 
+        log_loss.append(loss.item())
         if batch_idx % print_frequency == 0:
-            print("Epoch {} : {} ({:04d}/{:04d}) Loss = {:.4f}".format(epoch + 1, 'Train', batch_idx, int(batch_step_size), recon_loss.item()))
+            print("Epoch {} : {} ({:04d}/{:04d}) Loss = {:.4f}".format(epoch + 1, 'Train', batch_idx, int(batch_step_size), loss.item()))
     
     train_loss.append(np.mean(log_loss))
     print("Epoch {} done: Time = {}, Mean Loss = {}".format(epoch + 1, time.time() - start, train_loss[-1]))
