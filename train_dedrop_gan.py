@@ -2,6 +2,7 @@ import os
 import time
 import torch
 import numpy as np
+import torch.nn.functional as F
 
 from math import log
 from torch.optim import Adam
@@ -104,7 +105,7 @@ for epoch in range(checkpoint_epoch, epochs):
             schedulerDropGen.step()
             schedulerInpaint.step()
         
-        recon_loss = torch.nn.F.mse_loss(clean_fake, clean)
+        recon_loss = F.mse_loss(clean_fake, clean)
         log_loss.append(recon_loss.item())
 
         if batch_idx % print_frequency == 0:
