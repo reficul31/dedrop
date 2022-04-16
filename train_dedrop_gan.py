@@ -73,7 +73,7 @@ for epoch in range(checkpoint_epoch, epochs):
         clean = clean.to(device).float()
 
         disc_out_real, _ = netDisc(clean)
-        disc_loss_real = -torch.mean(disc_out_real)
+        disc_loss_real = torch.mean(disc_out_real)
 
         mask, mu, logvar, _ = netDropGen(rain)
         _, _, clean_fake = netInpaint(rain, mask)
@@ -83,9 +83,9 @@ for epoch in range(checkpoint_epoch, epochs):
         kl_gauss = torch.mean(mu ** 2 + (var - 1 - logvar)) / 2
 
         disc_out_fake, _ = netDisc(clean_fake)
-        disc_loss_fake = torch.mean(disc_out_real)
+        disc_loss_fake = -torch.mean(disc_out_real)
 
-        loss = disc_loss_real + disc_loss_fake - kl_gauss
+        loss = disc_loss_real + disc_loss_fake + kl_gauss
         with torch.set_grad_enabled(True):
             netDisc.zero_grad()
             netDropGen.zero_grad()
