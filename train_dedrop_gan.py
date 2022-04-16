@@ -2,9 +2,11 @@ import os
 import time
 import torch
 import numpy as np
+import torch.nn.functional as F
 
 from math import log
 from torch.optim import Adam
+from torch.autograd import Variable
 from torch.utils.data import DataLoader
 from torch.optim.lr_scheduler import MultiStepLR
 
@@ -73,7 +75,7 @@ for epoch in range(checkpoint_epoch, epochs):
         clean = clean.to(device).float()
 
         disc_out_real, _ = netDisc(clean)
-        disc_loss_real = torch.mean(disc_out_real)
+        disc_loss_real = -torch.mean(disc_out_real)
 
         mask, mu, logvar, _ = netDropGen(rain)
         _, _, clean_fake = netInpaint(rain, mask)
@@ -82,24 +84,45 @@ for epoch in range(checkpoint_epoch, epochs):
         var = torch.exp(logvar)
         kl_gauss = torch.mean(mu ** 2 + (var - 1 - logvar)) / 2
 
-        disc_out_fake, _ = netDisc(clean_fake)
-        disc_loss_fake = -torch.mean(disc_out_real)
-
-        loss = disc_loss_real + disc_loss_fake + kl_gauss
+        disc_out_fake, _ = netDisc(clean_fake.detach())
+        disc_loss_fake = torch.mean(disc_out_fake)
+        
+        alpha = torch.rand(clean.size(0), 1, 1, 1).cuda().expand_as(clean)
+        interpolated = Variable(alpha * clean.data + (1 - alpha) * clean_fake.data, requires_grad=True)
+        
+        out, _, _ = netDisc(interpolated)
+        grad = torch.autograd.grad(outputs=out,
+                                    inputs=interpolated,
+                                    grad_outputs=torch.ones(out.size()).cuda(),
+                                    retain_graph=True,
+                                    create_graph=True,
+                                    only_inputs=True)[0]
+        grad = grad.view(grad.size(0), -1)
+        grad_l2norm = torch.sqrt(torch.sum(grad ** 2, dim=1))
+        disc_loss_gp = torch.mean((grad_l2norm - 1) ** 2)
         with torch.set_grad_enabled(True):
             netDisc.zero_grad()
-            netDropGen.zero_grad()
-            netInpaint.zero_grad()
-            loss.backward()
-        
+            
+            lossDisc = disc_loss_real + disc_loss_fake + 10 * disc_loss_gp
+            lossDisc.backward()
+            
             optDisc.step()
-            optDropGen.step()
-            optInpaint.step()
+            if (batch_idx + 1) % 5 == 0:
+                netDropGen.zero_grad()
+                netInpaint.zero_grad()
+                
+                gen_out_fake, _ = netDisc(clean_fake.detach())
+                gen_loss_fake = -torch.mean(gen_out_fake)
+                lossGen = gen_loss_fake + kl_gauss
 
+                lossGen.backward()
+                optDropGen.step()
+                optInpaint.step()
             schedulerDisc.step()
             schedulerDropGen.step()
             schedulerInpaint.step()
-
+        
+        loss = F.mse_loss(clean, clean_fake)
         log_loss.append(loss.item())
         if batch_idx % print_frequency == 0:
             print("Epoch {} : {} ({:04d}/{:04d}) Loss = {:.4f}".format(epoch + 1, 'Train', batch_idx, int(batch_step_size), loss.item()))
