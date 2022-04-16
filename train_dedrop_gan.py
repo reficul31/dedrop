@@ -5,6 +5,7 @@ import numpy as np
 import torch.nn.functional as F
 
 from math import log
+from ssim import SSIM
 from torch.optim import Adam
 from torch.autograd import Variable
 from torch.utils.data import DataLoader
@@ -19,6 +20,8 @@ root_dir = "/home/sb4539/dedrop"
 epochs, batch_size = 100, 32
 print_frequency, save_checkpoint_frequency = 500, 20
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+criterion = SSIM()
 
 netDropGen = VAE().to(device)
 netInpaint = InpaintNet().to(device)
@@ -90,7 +93,7 @@ for epoch in range(checkpoint_epoch, epochs):
         alpha = torch.rand(clean.size(0), 1, 1, 1).cuda().expand_as(clean)
         interpolated = Variable(alpha * clean.data + (1 - alpha) * clean_fake.data, requires_grad=True)
         
-        out, _, _ = netDisc(interpolated)
+        out, _ = netDisc(interpolated)
         grad = torch.autograd.grad(outputs=out,
                                     inputs=interpolated,
                                     grad_outputs=torch.ones(out.size()).cuda(),
@@ -118,11 +121,12 @@ for epoch in range(checkpoint_epoch, epochs):
                 lossGen.backward()
                 optDropGen.step()
                 optInpaint.step()
+                
+                schedulerDropGen.step()
+                schedulerInpaint.step()
             schedulerDisc.step()
-            schedulerDropGen.step()
-            schedulerInpaint.step()
-        
-        loss = F.mse_loss(clean, clean_fake)
+
+        loss = criterion(clean, clean_fake)
         log_loss.append(loss.item())
         if batch_idx % print_frequency == 0:
             print("Epoch {} : {} ({:04d}/{:04d}) Loss = {:.4f}".format(epoch + 1, 'Train', batch_idx, int(batch_step_size), loss.item()))
