@@ -25,7 +25,7 @@ criterion = SSIM()
 
 netDropGen = VAE().to(device)
 netBG = PReNet().to(device)
-netDisc = SAGANDiscriminator().to(device)
+netDisc = SAGANDiscriminator(batch_size=batch_size).to(device)
 
 optDisc = Adam(netDisc.parameters(), lr=1e-3)
 optDropGen = Adam(netDropGen.parameters(), lr=1e-3)
@@ -96,7 +96,7 @@ for epoch in range(checkpoint_epoch, epochs):
 
         alpha = torch.rand(rain.size(0), 1, 1, 1).cuda().expand_as(rain)
         interpolated = Variable(alpha * rain.data + (1 - alpha) * rain_fake.data, requires_grad=True)
-        out, _ = netDisc(interpolated)
+        out, _, _ = netDisc(interpolated)
         grad = torch.autograd.grad(outputs=out,
                                     inputs=interpolated,
                                     grad_outputs=torch.ones(out.size()).cuda(),
