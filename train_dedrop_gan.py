@@ -12,7 +12,7 @@ from torch.utils.data import DataLoader
 from torch.optim.lr_scheduler import MultiStepLR
 
 from dataset import get_dataset
-from models import VAE, InpaintNet, Discriminator
+from models import VAE, PReNet, SAGANDiscriminator
 
 name = 'dedrop_gan'
 root_dir = "/home/sb4539/dedrop"
@@ -24,16 +24,16 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 criterion = SSIM()
 
 netDropGen = VAE().to(device)
-netInpaint = InpaintNet().to(device)
-netDisc = Discriminator().to(device)
+netBG = PReNet().to(device)
+netDisc = SAGANDiscriminator().to(device)
 
 optDisc = Adam(netDisc.parameters(), lr=1e-3)
 optDropGen = Adam(netDropGen.parameters(), lr=1e-3)
-optInpaint = Adam(netInpaint.parameters(), lr=1e-3)
+optBG = Adam(netBG.parameters(), lr=1e-3)
 
 schedulerDisc = MultiStepLR(optDisc, [50, 80, 95], gamma=0.1)
 schedulerDropGen = MultiStepLR(optDropGen, [50, 80, 95], gamma=0.1)
-schedulerInpaint = MultiStepLR(optInpaint, [50, 80, 95], gamma=0.1)
+schedulerBG = MultiStepLR(optBG, [50, 80, 95], gamma=0.1)
 
 checkpoint_epoch = 0
 if not os.path.isdir(os.path.join(root_dir, name)):
@@ -53,18 +53,21 @@ else:
     optDisc.load_state_dict(checkpoint_disc['optimizer_state_dict'])
     schedulerDisc.load_state_dict(checkpoint_disc['scheduler_state_dict'])
 
-    checkpoint_inpaint = torch.load(os.path.join(root_dir, name, "checkpoint_inpaint_latest.tar"))
-    assert checkpoint_epoch == int(checkpoint_inpaint['epoch'])
-    netInpaint.load_state_dict(checkpoint_inpaint['model_state_dict'])
-    optInpaint.load_state_dict(checkpoint_inpaint['optimizer_state_dict'])
-    schedulerInpaint.load_state_dict(checkpoint_inpaint['scheduler_state_dict'])
+    checkpoint_bg = torch.load(os.path.join(root_dir, name, "checkpoint_bg_latest.tar"))
+    assert checkpoint_epoch == int(checkpoint_bg['epoch'])
+    netBG.load_state_dict(checkpoint_bg['model_state_dict'])
+    optBG.load_state_dict(checkpoint_bg['optimizer_state_dict'])
+    schedulerBG.load_state_dict(checkpoint_bg['scheduler_state_dict'])
 
 train_dataset = get_dataset(phase='train')
 dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
 
 netDropGen.train()
-netInpaint.train()
+netBG.train()
 netDisc.train()
+
+log_max = log(1e4)
+log_min = log(1e-8)
 
 train_loss = []
 for epoch in range(checkpoint_epoch, epochs):
@@ -77,22 +80,22 @@ for epoch in range(checkpoint_epoch, epochs):
         rain = rain.to(device).float()
         clean = clean.to(device).float()
 
-        disc_out_real, _ = netDisc(clean)
+        disc_out_real, dr1, dr2 = netDisc(clean)
         disc_loss_real = -torch.mean(disc_out_real)
 
-        mask, mu, logvar, _ = netDropGen(rain)
-        _, _, clean_fake = netInpaint(rain, mask)
+        bg, _ = netBG(rain)
+        mask, mu, logvar, z = netDropGen(rain)
+        rain_fake = bg + mask
 
-        logvar.clamp(min=log(1e-8), max=log(1e4))
-        var = torch.exp(logvar)
-        kl_gauss = torch.mean(mu ** 2 + (var - 1 - logvar)) / 2
-
-        disc_out_fake, _ = netDisc(clean_fake.detach())
+        disc_out_fake, dr1, dr2 = netDisc(rain_fake.detach())
         disc_loss_fake = torch.mean(disc_out_fake)
         
-        alpha = torch.rand(clean.size(0), 1, 1, 1).cuda().expand_as(clean)
-        interpolated = Variable(alpha * clean.data + (1 - alpha) * clean_fake.data, requires_grad=True)
-        
+        logvar.clamp_(min=log_min, max=log_max) # clip
+        var = torch.exp(logvar)
+        kl_gauss = 0.5 * torch.mean(mu ** 2 + (var - 1 - logvar))
+
+        alpha = torch.rand(rain.size(0), 1, 1, 1).cuda().expand_as(rain)
+        interpolated = Variable(alpha * rain.data + (1 - alpha) * rain_fake.data, requires_grad=True)
         out, _ = netDisc(interpolated)
         grad = torch.autograd.grad(outputs=out,
                                     inputs=interpolated,
@@ -112,21 +115,21 @@ for epoch in range(checkpoint_epoch, epochs):
             optDisc.step()
             if (batch_idx + 1) % 5 == 0:
                 netDropGen.zero_grad()
-                netInpaint.zero_grad()
+                netBG.zero_grad()
                 
-                gen_out_fake, _ = netDisc(clean_fake.detach())
+                gen_out_fake, _ = netDisc(rain_fake.detach())
                 gen_loss_fake = -torch.mean(gen_out_fake)
                 lossGen = gen_loss_fake + kl_gauss
 
                 lossGen.backward()
                 optDropGen.step()
-                optInpaint.step()
+                optBG.step()
                 
                 schedulerDropGen.step()
-                schedulerInpaint.step()
+                schedulerBG.step()
             schedulerDisc.step()
 
-        loss = criterion(clean, clean_fake)
+        loss = criterion(clean, bg)
         log_loss.append(loss.item())
         if batch_idx % print_frequency == 0:
             print("Epoch {} : {} ({:04d}/{:04d}) Loss = {:.4f}".format(epoch + 1, 'Train', batch_idx, int(batch_step_size), loss.item()))
@@ -149,10 +152,10 @@ for epoch in range(checkpoint_epoch, epochs):
         }, os.path.join(root_dir, name, "checkpoint_disc_{}.tar".format(epoch)))
         torch.save({
             'epoch': epoch,
-            'model_state_dict': netInpaint.state_dict(),
-            'optimizer_state_dict': optInpaint.state_dict(),
-            'scheduler_state_dict': schedulerInpaint.state_dict()
-        }, os.path.join(root_dir, name, "checkpoint_inpaint_{}.tar".format(epoch)))
+            'model_state_dict': netBG.state_dict(),
+            'optimizer_state_dict': optBG.state_dict(),
+            'scheduler_state_dict': schedulerBG.state_dict()
+        }, os.path.join(root_dir, name, "checkpoint_bg_{}.tar".format(epoch)))
         np.save(os.path.join(root_dir, name, "train-loss-epoch-{}.npy".format(epoch)), train_loss)
     else:
         torch.save({
@@ -169,7 +172,7 @@ for epoch in range(checkpoint_epoch, epochs):
         }, os.path.join(root_dir, name, "checkpoint_disc_latest.tar"))
         torch.save({
             'epoch': epoch,
-            'model_state_dict': netInpaint.state_dict(),
-            'optimizer_state_dict': optInpaint.state_dict(),
-            'scheduler_state_dict': schedulerInpaint.state_dict()
-        }, os.path.join(root_dir, name, "checkpoint_inpaint_latest.tar"))
+            'model_state_dict': netBG.state_dict(),
+            'optimizer_state_dict': optBG.state_dict(),
+            'scheduler_state_dict': schedulerBG.state_dict()
+        }, os.path.join(root_dir, name, "checkpoint_bg_latest.tar"))
