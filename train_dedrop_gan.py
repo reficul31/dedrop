@@ -117,7 +117,7 @@ for epoch in range(checkpoint_epoch, epochs):
                 netDropGen.zero_grad()
                 netBG.zero_grad()
                 
-                gen_out_fake, _ = netDisc(rain_fake.detach())
+                gen_out_fake, _, _ = netDisc(rain_fake.detach())
                 gen_loss_fake = -torch.mean(gen_out_fake)
                 lossGen = gen_loss_fake + kl_gauss
 
