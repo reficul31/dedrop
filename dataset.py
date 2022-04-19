@@ -11,6 +11,7 @@ class TestDataset(Dataset):
     def __init__(self, phase):
         super().__init__()
         
+        self.size = (704, 448)
         file_path = os.path.dirname(os.path.realpath(__file__))
 
         self.rain_folder_path = os.path.join(file_path, phase, "data")
@@ -32,10 +33,12 @@ class TestDataset(Dataset):
         rain_path = os.path.join(self.rain_folder_path, self.rain_image_list[idx])
         
         clean = cv2.imread(clean_path)
+        clean = cv2.resize(clean, self.size)
         b, g, r = cv2.split(clean)
         clean = cv2.merge([r, g, b])
 
         rain = cv2.imread(rain_path)
+        rain = cv2.resize(rain, self.size)
         b, g, r = cv2.split(rain)
         rain = cv2.merge([r, g, b])
 
