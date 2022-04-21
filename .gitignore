@@ -5,3 +5,6 @@ train/
 *.zip
 **/**/__pycache__/
 .ipynb_checkpoints
+dedrop/
+baseline/
+dedrop_gan/
